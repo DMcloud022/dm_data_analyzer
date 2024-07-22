@@ -31,3 +31,16 @@ class Visualizer:
         sns.heatmap(data.corr(), annot=True, cmap='coolwarm', linewidths=0.5)
         plt.title('Correlation Heatmap')
         return plt.gcf()
+
+    def create_box_plot(self, data, column):
+        plt.figure(figsize=(10, 6))
+        sns.boxplot(data=data, y=column)
+        plt.title(f'Box Plot of {column}')
+        plt.ylabel(column)
+        return plt.gcf()
+
+    def create_pair_plot(self, data):
+        plt.figure(figsize=(12, 10))
+        sns.pairplot(data)
+        plt.tight_layout()
+        return plt.gcf()
