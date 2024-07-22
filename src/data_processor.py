@@ -11,35 +11,38 @@ class DataProcessor:
         self.logger = logger
         self.error_handler = error_handler
 
-    def prepare_data(self, df):
+    def prepare_data(self, df, user_choices):
         try:
             self.logger.log_info("Starting data preparation...")
             
             # Step 1: Basic cleaning (always perform this step)
             df = self.basic_cleaning(df)
             
-            # Step 2: Handle missing values (if any)
-            if df.isnull().sum().sum() > 0:
-                df = self.handle_missing_values(df)
+            # Step 2: Handle duplicates
+            if user_choices['handle_duplicates']:
+                df = self.handle_duplicates(df, user_choices['duplicate_method'])
             
-            # Step 3: Convert data types (if needed)
+            # Step 3: Handle missing values
+            if user_choices['handle_missing']:
+                df = self.handle_missing_values(df, user_choices['missing_method'])
+            
+            # Step 4: Convert data types
             df = self.convert_data_types(df)
             
-            # Step 4: Handle outliers (for numeric columns)
-            if len(df.select_dtypes(include=[np.number]).columns) > 0:
+            # Step 5: Handle outliers (for numeric columns)
+            if user_choices['handle_outliers']:
                 df = self.handle_outliers(df)
             
-            # Step 5: Encode categorical variables (if any)
-            if len(df.select_dtypes(include=['object']).columns) > 0:
+            # Step 6: Encode categorical variables (if any)
+            if user_choices['encode_categorical']:
                 df = self.encode_categorical_variables(df)
             
-            # Step 6: Feature scaling (for numeric columns, if more than one)
-            numeric_columns = df.select_dtypes(include=[np.number]).columns
-            if len(numeric_columns) > 1:
+            # Step 7: Feature scaling (for numeric columns, if more than one)
+            if user_choices['scale_features']:
                 df = self.scale_features(df)
             
-            # Step 7: Feature selection (if there are many features)
-            if df.shape[1] > 20:  # Arbitrary threshold, adjust as needed
+            # Step 8: Feature selection (if there are many features)
+            if user_choices['select_features']:
                 df = self.select_features(df)
             
             self.logger.log_info("Data preparation completed successfully.")
@@ -50,26 +53,38 @@ class DataProcessor:
 
     def basic_cleaning(self, df):
         try:
-            # Remove duplicates
-            initial_rows = len(df)
-            df = df.drop_duplicates()
-            removed_rows = initial_rows - len(df)
-            if removed_rows > 0:
-                self.logger.log_info(f"Removed {removed_rows} duplicate rows.")
-
             # Clean column names
-            original_columns = df.columns
-            df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_')
-            df.columns = [re.sub(r'[^\w\s]', '', col) for col in df.columns]
-            if not (df.columns == original_columns).all():
-                self.logger.log_info("Cleaned column names.")
-
+            df.columns = df.columns.str.strip().str.lower()
+            df.columns = [re.sub(r'[^\w\s]', '', col).replace(' ', '_') for col in df.columns]
+            
+            # Remove leading/trailing whitespace from string columns
+            object_columns = df.select_dtypes(include=['object']).columns
+            df[object_columns] = df[object_columns].apply(lambda x: x.str.strip())
+            
+            self.logger.log_info("Basic cleaning completed.")
             return df
         except Exception as e:
             self.logger.log_error(f"Error in basic_cleaning: {str(e)}")
-            return df  # Return original dataframe if cleaning fails
+            return df
 
-    def handle_missing_values(self, df):
+    def handle_duplicates(self, df, method):
+        try:
+            initial_rows = len(df)
+            if method == 'first':
+                df = df.drop_duplicates(keep='first')
+            elif method == 'last':
+                df = df.drop_duplicates(keep='last')
+            elif method == 'all':
+                df = df.drop_duplicates(keep=False)
+            
+            removed_rows = initial_rows - len(df)
+            self.logger.log_info(f"Removed {removed_rows} duplicate rows.")
+            return df
+        except Exception as e:
+            self.logger.log_error(f"Error in handle_duplicates: {str(e)}")
+            return df
+
+    def handle_missing_values(self, df, method):
         try:
             for column in df.columns:
                 missing_count = df[column].isnull().sum()
@@ -77,16 +92,24 @@ class DataProcessor:
                     missing_percentage = (missing_count / len(df)) * 100
                     if missing_percentage > 50:
                         self.logger.log_warning(f"Column '{column}' has {missing_percentage:.2f}% missing values. Consider dropping this column.")
-                    elif df[column].dtype in ['int64', 'float64']:
+                    
+                    if method == 'drop':
+                        df = df.dropna(subset=[column])
+                    elif method == 'mean' and df[column].dtype in ['int64', 'float64']:
+                        df[column] = df[column].fillna(df[column].mean())
+                    elif method == 'median' and df[column].dtype in ['int64', 'float64']:
                         df[column] = df[column].fillna(df[column].median())
-                        self.logger.log_info(f"Filled missing values in column '{column}' with median.")
-                    else:
+                    elif method == 'mode':
                         df[column] = df[column].fillna(df[column].mode()[0])
-                        self.logger.log_info(f"Filled missing values in column '{column}' with mode.")
+                    elif method == 'constant':
+                        df[column] = df[column].fillna(0)  # You can change this constant value as needed
+                    
+                    self.logger.log_info(f"Handled missing values in column '{column}' using {method} method.")
             return df
         except Exception as e:
             self.logger.log_error(f"Error in handle_missing_values: {str(e)}")
-            return df  # Return original dataframe if handling missing values fails
+            return df
+
 
     def convert_data_types(self, df):
         try:
