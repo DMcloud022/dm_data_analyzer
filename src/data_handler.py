@@ -14,7 +14,7 @@ class DataHandler:
     # Generate a new Fernet key
     key = Fernet.generate_key()
     encoded_key = base64.urlsafe_b64encode(key).decode()
-    print(f"Base64-encoded key: {encoded_key}")
+    # print(f"Base64-encoded key: {encoded_key}")
 
     def __init__(self, config: Config, logger: Logger, error_handler: ErrorHandler):
         self.config = config
